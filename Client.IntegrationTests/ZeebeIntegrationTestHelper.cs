@@ -1,19 +1,14 @@
 using System;
-using System.ComponentModel;
 using System.IO;
 using System.Net;
-using System.Threading;
 using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
-using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
-using NUnit.Framework.Constraints;
 using Zeebe.Client;
-using Zeebe.Client.Api.Builder;
 using Zeebe.Client.Impl.Builder;
 using IContainer = DotNet.Testcontainers.Containers.IContainer;
 
@@ -179,25 +174,7 @@ namespace Client.IntegrationTests
                 .WithEnvironment("IDENTITY_DATABASE_NAME", "bitnami_keycloak")
                 .WithEnvironment("IDENTITY_DATABASE_USERNAME", "bn_keycloak")
                 .WithEnvironment("IDENTITY_DATABASE_PASSWORD", "#3]O?4RGj)DE7Z!9SA5")
-                .WithEnvironment("KEYCLOAK_INIT_OPERATE_SECRET", "XALaRPl5qwTEItdwCMiPS62nVpKs7dL7")
-                .WithEnvironment("KEYCLOAK_INIT_OPERATE_ROOT_URL", "http://localhost:1234/test")
-                .WithEnvironment("KEYCLOAK_INIT_TASKLIST_SECRET", "XALaRPl5qwTEItdwCMiPS62nVpKs7dL7")
-                .WithEnvironment("KEYCLOAK_INIT_TASKLIST_ROOT_URL", "http://localhost:1234/test")
-                .WithEnvironment("KEYCLOAK_INIT_OPTIMIZE_SECRET", "XALaRPl5qwTEItdwCMiPS62nVpKs7dL7")
-                .WithEnvironment("KEYCLOAK_INIT_OPTIMIZE_ROOT_URL", "http://localhost:1234/test")
-                .WithEnvironment("KEYCLOAK_INIT_WEBMODELER_ROOT_URL", "http://localhost:1234/test")
-                .WithEnvironment("KEYCLOAK_INIT_CONNECTORS_SECRET", "XALaRPl5qwTEItdwCMiPS62nVpKs7dL7")
-                .WithEnvironment("KEYCLOAK_INIT_CONNECTORS_ROOT_URL", "http://localhost:1234/test")
                 .WithEnvironment("KEYCLOAK_INIT_ZEEBE_NAME", "zeebe")
-                .WithEnvironment("KEYCLOAK_USERS_0_USERNAME", "demo")
-                .WithEnvironment("KEYCLOAK_USERS_0_PASSWORD", "demo")
-                .WithEnvironment("KEYCLOAK_USERS_0_FIRST_NAME", "demo")
-                .WithEnvironment("KEYCLOAK_USERS_0_EMAIL", "demo@acme.com")
-                .WithEnvironment("KEYCLOAK_USERS_0_ROLES_0", "Identity")
-                .WithEnvironment("KEYCLOAK_USERS_0_ROLES_1", "Optimize")
-                .WithEnvironment("KEYCLOAK_USERS_0_ROLES_2", "Operate")
-                .WithEnvironment("KEYCLOAK_USERS_0_ROLES_3", "Tasklist")
-                .WithEnvironment("KEYCLOAK_USERS_0_ROLES_4", "Web Modeler")
                 .WithEnvironment("KEYCLOAK_CLIENTS_0_NAME", "zeebe")
                 .WithEnvironment("KEYCLOAK_CLIENTS_0_ID", "zeebe")
                 .WithEnvironment("KEYCLOAK_CLIENTS_0_SECRET", "sddh123865WUS)(1%!")
@@ -244,10 +221,6 @@ namespace Client.IntegrationTests
                 .Build();
         }
 
-        private static readonly string ServerCertPath =
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "server.crt");
-
-
         public IZeebeClient CreateAuthenticatedZeebeClient()
         {
             var loggerFactory = LoggerFactory;
@@ -265,7 +238,7 @@ namespace Client.IntegrationTests
 
         private async Task AwaitBrokerReadiness()
         {
-            var zeebeClient = (ZeebeClient)client;
+            var zeebeClient = withIdentity ? (ZeebeClient)CreateAuthenticatedZeebeClient() : (ZeebeClient)client;
             await zeebeClient.Connect();
             var topologyErrorLogger = LoggerFactory.CreateLogger<ZeebeIntegrationTestHelper>();
             var ready = false;
@@ -283,15 +256,8 @@ namespace Client.IntegrationTests
                 }
                 catch (Exception e)
                 {
-                    if (e is RpcException rpcException && rpcException.StatusCode == StatusCode.Unauthenticated)
-                    {
-                        ready = true;
-                    }
-                    else
-                    {
-                        // retry
-                        topologyErrorLogger.LogError(e, "Exception in sending topology");
-                    }
+                    topologyErrorLogger.LogError(e, "Exception in sending topology");
+                    // retry
                 }
 
                 continueLoop = !ready && maxCount > retries++;
