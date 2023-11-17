@@ -8,10 +8,10 @@ namespace Zeebe.Client.Impl.Builder
 {
     public class CamundaCloudTokenProviderBuilder :
         ICamundaCloudTokenProviderBuilder,
-            ICamundaCloudTokenProviderBuilderStep2,
-            ICamundaCloudTokenProviderBuilderStep3,
-            ICamundaCloudTokenProviderBuilderStep4,
-            ICamundaCloudTokenProviderBuilderFinalStep
+        ICamundaCloudTokenProviderBuilderStep2,
+        ICamundaCloudTokenProviderBuilderStep3,
+        ICamundaCloudTokenProviderBuilderStep4,
+        ICamundaCloudTokenProviderBuilderFinalStep
     {
         private ILoggerFactory loggerFactory;
         private string audience;
