@@ -2,19 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Zeebe.Client.Impl.Misc;
 
 namespace Zeebe.Client.Impl.Builder
 {
-    public class CamundaCloudTokenProvider : BaseTokenProvider, IDisposable
+    public class OAuth2TokenProvider : BaseTokenProvider, IDisposable
     {
-        private const string JsonContent =
-            "{{\"client_id\":\"{0}\",\"client_secret\":\"{1}\",\"audience\":\"{2}\",\"grant_type\":\"client_credentials\"}}";
-
-        private readonly ILogger<CamundaCloudTokenProvider> logger;
+        private readonly ILogger<OAuth2TokenProvider> logger;
         private readonly string authServer;
         private readonly string clientId;
         private readonly string clientSecret;
@@ -22,12 +18,12 @@ namespace Zeebe.Client.Impl.Builder
         private HttpClient httpClient;
         private HttpMessageHandler httpMessageHandler;
 
-        internal CamundaCloudTokenProvider(
+        public OAuth2TokenProvider(
             string authServer,
             string clientId,
             string clientSecret,
             string audience,
-            ILogger<CamundaCloudTokenProvider> logger = null) : base("credentials", audience)
+            ILogger<OAuth2TokenProvider> logger = null) : base("oauth2_credentials", audience, logger)
         {
             this.logger = logger;
             this.authServer = authServer;
@@ -51,24 +47,6 @@ namespace Zeebe.Client.Impl.Builder
             httpClient = new HttpClient(handler);
         }
 
-        // Requesting the token is similar to this:
-        //        curl --request POST \
-        //        --url https://login.cloud.[ultrawombat.com | camunda.io]/oauth/token \
-        //        --header 'content-type: application/json' \
-        //        --data '{"client_id":"${clientId}","client_secret":"${clientSecret}","audience":"${audience}","grant_type":"client_credentials"}'
-
-        // Code expects the following result:
-        //
-        //        {
-        //            "access_token":"MTQ0NjJkZmQ5OTM2NDE1ZTZjNGZmZjI3",
-        //            "token_type":"bearer",
-        //            "expires_in":3600,
-        //            "refresh_token":"IwOGYzYTlmM2YxOTQ5MGE3YmNmMDFkNTVk",
-        //            "scope":"create"
-        //        }
-        //
-        // Defined here https://www.oauth.com/oauth2-servers/access-tokens/access-token-response/
-
         protected override async Task<string> RequestAccessTokenAsync()
         {
             var directoryInfo = Directory.CreateDirectory(TokenStoragePath);
@@ -77,10 +55,9 @@ namespace Zeebe.Client.Impl.Builder
                 throw new IOException("Expected to create '~/.zeebe/' directory, but failed to do so.");
             }
 
-            var json = string.Format(JsonContent, clientId, clientSecret, audience);
+            var formContent = BuildRequestAccessTokenContent();
 
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var httpResponseMessage = await httpClient.PostAsync(authServer, content);
+            var httpResponseMessage = await httpClient.PostAsync(authServer, formContent);
 
             var result = await httpResponseMessage.Content.ReadAsStringAsync();
             var token = AccessToken.FromJson(result);
@@ -89,6 +66,18 @@ namespace Zeebe.Client.Impl.Builder
             WriteCredentials();
 
             return token.Token;
+        }
+
+        private FormUrlEncodedContent BuildRequestAccessTokenContent()
+        {
+            var formContent = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", clientId),
+                new KeyValuePair<string, string>("client_secret", clientSecret),
+                new KeyValuePair<string, string>("audience", audience),
+                new KeyValuePair<string, string>("grant_type", "client_credentials")
+            });
+            return formContent;
         }
 
         public void Dispose()

@@ -14,10 +14,10 @@ using Zeebe.Client.Impl.Misc;
 namespace Zeebe.Client
 {
     [TestFixture]
-    public class CamundaCloudTokenProviderTest
+    public class OAuth2TokenProviderTest
     {
         private HttpMessageHandlerStub MessageHandlerStub { get; set; }
-        private CamundaCloudTokenProvider TokenProvider { get; set; }
+        private OAuth2TokenProvider TokenProvider { get; set; }
         private string TokenStoragePath { get; set; }
         private static long ExpiresIn { get; set; }
         private static string Token { get; set; }
@@ -34,7 +34,7 @@ namespace Zeebe.Client
             _clientId = "ID";
             _clientSecret = "SECRET";
             _audience = "AUDIENCE";
-            TokenProvider = new CamundaCloudTokenProviderBuilder()
+            TokenProvider = new OAuth2TokenProviderBuilder()
                 .UseAuthServer(_requestUri)
                 .UseClientId(_clientId)
                 .UseClientSecret(_clientSecret)
@@ -66,11 +66,12 @@ namespace Zeebe.Client
             {
                 CheckDisposed();
                 Assert.AreEqual(request.RequestUri, _requestUri);
-                var content = await request.Content.ReadAsStringAsync();
-                var jsonObject = JObject.Parse(content);
-                Assert.AreEqual((string)jsonObject["client_id"], _clientId);
-                Assert.AreEqual((string)jsonObject["client_secret"], _clientSecret);
-                Assert.AreEqual((string)jsonObject["audience"], _audience);
+                var content = await request.Content.ReadAsStringAsync(cancellationToken);
+
+                var formFields = GetFormFields(content);
+                Assert.AreEqual(formFields["client_id"], _clientId);
+                Assert.AreEqual(formFields["client_secret"], _clientSecret);
+                Assert.AreEqual(formFields["audience"], _audience);
 
                 RequestCount++;
                 var responseMessage = new HttpResponseMessage(HttpStatusCode.OK)
@@ -137,7 +138,7 @@ namespace Zeebe.Client
         {
             // given
             await TokenProvider.GetAccessTokenForRequestAsync();
-            var otherProvider = new CamundaCloudTokenProviderBuilder()
+            var otherProvider = new OAuth2TokenProviderBuilder()
                 .UseAuthServer(_requestUri)
                 .UseClientId(_clientId = "OTHERID")
                 .UseClientSecret(_clientSecret = "OTHERSECRET")
@@ -247,7 +248,7 @@ namespace Zeebe.Client
             // given
             Token = "STORED_TOKEN";
             await TokenProvider.GetAccessTokenForRequestAsync();
-            var otherProvider = new CamundaCloudTokenProviderBuilder()
+            var otherProvider = new OAuth2TokenProviderBuilder()
                 .UseAuthServer(_requestUri)
                 .UseClientId(_clientId = "OTHERID")
                 .UseClientSecret(_clientSecret = "OTHERSECRET")
@@ -315,6 +316,23 @@ namespace Zeebe.Client
 
             // then
             Assert.AreEqual(2, MessageHandlerStub.RequestCount);
+        }
+        
+        private static Dictionary<string, string> GetFormFields(string content)
+        {
+            var formFields = new Dictionary<string, string>();
+            var keyValuePairs = content.Split('&');
+            foreach (var keyValuePair in keyValuePairs)
+            {
+                var pair = keyValuePair.Split('=');
+                if (pair.Length == 2)
+                {
+                    var key = Uri.UnescapeDataString(pair[0]);
+                    var value = Uri.UnescapeDataString(pair[1]);
+                    formFields.Add(key, value);
+                }
+            }
+            return formFields;
         }
     }
 }
